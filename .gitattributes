@@ -1,0 +1,9 @@
+# Shell scripts must keep LF endings or bash fails on them in WSL/Linux/macOS,
+# even when the repo is checked out on Windows with core.autocrlf=true.
+*.sh text eol=lf
+
+*.zip binary
+*.gz binary
+*.pdf binary
+*.odt binary
+*.odg binary

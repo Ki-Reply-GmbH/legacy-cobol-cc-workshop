@@ -1,0 +1,53 @@
+# Vendor content not needed to build or run ACAS (Cobol-files build)
+/ACAS-Manuals/
+/Basic-Code/
+/home/
+/etc/
+/mysql-connector-c-*-src.tar.gz
+/mariadb-connector-c-*-src.zip
+
+# GnuCOBOL build output
+*.so
+*.dylib
+*.o
+*.dll
+*.exe
+*.lst
+*.prn
+*.c.h
+*.c.l*.h
+
+# Executables produced by an in-place build
+/common/ACAS
+/common/*LD
+/common/*UNL
+/common/*RES
+/general/general
+/irs/irs
+/purchase/purchase
+/sales/sales
+/stock/stock
+
+# Build and data-load logs
+build.log
+install.log
+load.log
+load.err
+
+# ACAS data and backups, if ACAS is ever run from inside the tree
+*.dat
+temp-backups/
+archives/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+*~
+*.swp
+.~lock.*#
+
+# Local environment and Claude Code settings
+.env
+.env.*
+.claude/settings.local.json
