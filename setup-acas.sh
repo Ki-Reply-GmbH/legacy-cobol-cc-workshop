@@ -19,7 +19,7 @@
 #    Enter your Linux password when sudo asks for it (package install).
 #
 # -----------------------------------------------------------------------------
-# macOS (NOT tested; written from the differences listed below)
+# macOS (install logic simulated on Linux; not yet run on a real Mac)
 # -----------------------------------------------------------------------------
 # 1. Install Homebrew (https://brew.sh) and the Xcode Command Line Tools
 #    (the script starts `xcode-select --install` if they're missing).
@@ -64,6 +64,8 @@
 #   - Open a NEW terminal (or run `exec bash` / `exec zsh`) to load the env vars.
 #   - Make the terminal at least 80 columns x 24 lines.
 #   - Run:  cd ~/ACAS && ACAS
+#     (irs, stock, purchase and general also run directly by name; Sales has
+#     no standalone executable in this build, so open it from the ACAS menu)
 #   - First run opens the System Parameter set-up (manual chapter 19):
 #       * Company name: asked ONCE only, and can't be changed later.
 #       * Sub-systems in use: answer Y to all if unsure (also asked once).
@@ -71,6 +73,7 @@
 #       * (2-03) Operating System: 6 = Linux (WSL), 3 = Mac
 #       * (2-05) Print spool names: CUPS printer names (`lpstat -p` lists them)
 # =============================================================================
+[ -n "${BASH_VERSION:-}" ] || { echo "Run this script with bash:  bash $0" >&2; exit 1; }
 set -eu
 
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -81,7 +84,7 @@ CLEAN=0
 for arg in "$@"; do
   case "$arg" in
     --clean) CLEAN=1 ;;
-    -h|--help) sed -n '2,80p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR > 1 { if (/^#/) print; else exit }' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -101,12 +104,20 @@ esac
 if [ "${SKIP_DEPS:-0}" != "1" ]; then
   step "Installing build dependencies"
   if [ "$OS" = "Linux" ]; then
-    command -v apt-get >/dev/null 2>&1 || die "apt-get not found. Install GnuCOBOL 3.x plus the Berkeley DB, ncurses and zlib dev packages yourself, then re-run with SKIP_DEPS=1."
-    sudo apt-get update
+    command -v apt-get >/dev/null 2>&1 || die "apt-get not found (only Debian/Ubuntu are automated). Install GnuCOBOL 3.2 plus the Berkeley DB, ncurses and zlib development packages yourself, then re-run with SKIP_DEPS=1."
+    if [ "$(id -u)" -eq 0 ]; then SUDO=""; else
+      command -v sudo >/dev/null 2>&1 || die "sudo not found and you aren't root. Install the packages yourself, then re-run with SKIP_DEPS=1."
+      SUDO="sudo"
+    fi
+    $SUDO apt-get update
     if apt-cache show gnucobol3 >/dev/null 2>&1; then COBOL_PKG=gnucobol3; else COBOL_PKG=gnucobol; fi
-    sudo apt-get install -y "$COBOL_PKG" libdb-dev libncurses-dev zlib1g-dev build-essential
+    $SUDO apt-get install -y "$COBOL_PKG" libdb-dev libncurses-dev zlib1g-dev build-essential
   else
     xcode-select -p >/dev/null 2>&1 || { xcode-select --install || true; die "Finish installing the Xcode Command Line Tools, then re-run this script."; }
+    # Homebrew isn't on PATH in some shells (Apple Silicon: /opt/homebrew, Intel: /usr/local).
+    command -v brew >/dev/null 2>&1 || for b in /opt/homebrew/bin/brew /usr/local/bin/brew; do
+      if [ -x "$b" ]; then eval "$("$b" shellenv)"; break; fi
+    done
     command -v brew >/dev/null 2>&1 || die "Homebrew not found. Install it from https://brew.sh, then re-run."
     brew install gnucobol
   fi
@@ -117,6 +128,7 @@ COBC_VER="$(cobc --version | head -n1)"
 echo "Using: $COBC_VER"
 case "$(echo "$COBC_VER" | grep -oE '[0-9]+\.[0-9]+' | head -n1)" in
   1.*|2.*) die "GnuCOBOL 3.x is required (3.2 recommended by the ACAS manual)." ;;
+  3.0|3.1) echo "WARNING: ACAS v3.3 is built and tested with GnuCOBOL 3.2; this version may fail to build." ;;
 esac
 
 # --- 2. Copy sources to the build directory ----------------------------------
@@ -132,13 +144,13 @@ if [ -e "$BUILD_DIR" ]; then
 fi
 mkdir -p "$BUILD_DIR"
 touch "$BUILD_DIR/$MARKER"
-# Manuals, legacy BASIC code and the bundled Berkeley DB tarball aren't needed to build.
-for item in "$SRC_DIR"/*; do
-  case "$(basename "$item")" in
-    ACAS-Manuals|Basic-Code|home) continue ;;
-  esac
-  cp -R "$item" "$BUILD_DIR/"
+# Copy only what the build uses (top-level scripts and the six source dirs), so
+# manuals, workshop material and anything else in the repo stay out of the build.
+for d in common copybooks general irs purchase sales stock; do
+  [ -d "$SRC_DIR/$d" ] || die "Source directory missing: $SRC_DIR/$d"
+  cp -R "$SRC_DIR/$d" "$BUILD_DIR/"
 done
+cp "$SRC_DIR"/*.sh "$BUILD_DIR/"
 
 step "Normalising shell scripts (LF endings, execute bit)"
 find "$BUILD_DIR" -name '*.sh' -type f -exec perl -pi -e 's/\r$//' {} +
@@ -201,10 +213,14 @@ if grep -nE 'error:|cannot find|No such file|Permission denied|command not found
   die "The build reported the errors above. Fix them and re-run with --clean."
 fi
 
-if [ -f "$BUILD_DIR/common/sys002.dylib" ]; then EXT=dylib; else EXT=so; fi
+if [ -f "$BUILD_DIR/common/sys002.so" ]; then EXT=so
+elif [ -f "$BUILD_DIR/common/sys002.dylib" ]; then EXT=dylib
+else die "Build finished but common/sys002 (.so/.dylib) was not produced. See $BUILD_LOG"; fi
 missing=""
-for f in common/ACAS irs/irs general/general purchase/purchase sales/sales stock/stock \
-         "common/sys002.$EXT" "common/dummy-rdbmsMT.$EXT"; do
+# The no-RDBMS sales script builds only the sales.$EXT module (its `cobc -x`
+# line is commented out upstream), so Sales is started from the ACAS menu.
+for f in common/ACAS irs/irs general/general purchase/purchase stock/stock \
+         "sales/sales.$EXT" "common/sys002.$EXT" "common/dummy-rdbmsMT.$EXT"; do
   [ -f "$BUILD_DIR/$f" ] || missing="$missing $f"
 done
 [ -z "$missing" ] || die "Build finished but these outputs are missing:$missing"
@@ -223,6 +239,9 @@ if [ "$OS" = "Linux" ]; then
   fi
   step "Installing into ~/bin with $INSTALLER"
   (cd "$BUILD_DIR" && bash "$INSTALLER") 2>&1 | tee "$INSTALL_LOG"
+  # install-ACAS.sh writes PATH with the install-time $PATH expanded and unquoted.
+  # Under WSL that includes Windows paths with spaces, which breaks the line.
+  sed -i 's|^export PATH=~/bin:\.:.*$|export PATH="$HOME/bin:.:$PATH"|' "$HOME/.bashrc"
 else
   step "Installing into ~/bin (macOS)"
   {
@@ -233,7 +252,7 @@ else
     for d in common irs general purchase sales stock; do
       find "$BUILD_DIR/$d" -maxdepth 1 -type f -name "*.$EXT" -exec cp -fv {} "$HOME/bin/" \;
     done
-    for f in common/ACAS irs/irs general/general purchase/purchase sales/sales stock/stock; do
+    for f in common/ACAS irs/irs general/general purchase/purchase stock/stock; do
       cp -fv "$BUILD_DIR/$f" "$HOME/bin/"
     done
     chmod u+x "$HOME"/bin/*.sh
