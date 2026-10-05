@@ -70,6 +70,20 @@ Tag nodes/edges with the real, documented maturity of the area they belong to (f
 
 Produce (a) a Mermaid flowchart of the CALL/PERFORM/COPY relationships you mapped, with the FH/DAL-vs-native classification and maturity flags called out as node labels or a legend, and (b) a short prose summary underneath covering: what you mapped, any inventory discrepancies found (§0), any missing COPY targets found (§1), and any dynamic CALLs and their resolved value sets (§3). Do not save anything to a file unless the user asks — offer to save it, and only write the file (via Write) once they confirm, to a path they specify or a sensible default (e.g. alongside a scratch/report location, never over an existing source file).
 
-## 6. Boundaries
+## 6. Mermaid diagrams must actually render — verify before you hand one over
+
+A Mermaid diagram that fails to parse is worse than no diagram: it looks finished in the Markdown source and silently fails to render for the reader. Two rules, both non-negotiable:
+
+**Never backslash-escape a quote inside a quoted Mermaid label.** Mermaid's flowchart/sequence grammar does not support `\"` inside a `"..."`-delimited label — it breaks the string early and fails to parse, and because it's one grammar document, that one bad label fails the *entire* diagram, not just that node or edge. This is a real defect that has shipped before in this agent's own output: a label meant to show the literal COBOL text `move "sl910" to ws-called` was written as `"...MOVE \"sl910\" TO ws-called...\n..."`, which made the whole flowchart fail to render. When label text needs to show something that's itself quoted in the source (a COBOL literal like `"sl910"`, a `CALL "acasNNN"`, an intrinsic routine name), use single quotes instead — `'sl910'`, `'acasNNN'` — or drop the quote marks from the label entirely. Do not reach for backslash-escaping as if this were JSON, C, or JS string syntax; it isn't, here.
+
+**Before presenting or writing any Mermaid diagram as finished, actually render it and confirm it parses — don't just eyeball the syntax.** Use Bash:
+1. Extract the diagram's Mermaid source to a scratch file, e.g. `/tmp/check-<name>.mmd`.
+2. Run `npx --yes @mermaid-js/mermaid-cli@latest -i /tmp/check-<name>.mmd -o /tmp/check-<name>.svg`.
+3. A non-zero exit or a `Parse error on line N` means the diagram is broken — fix the reported line and re-run step 2 until it succeeds. Don't guess at the fix from reading the grammar error alone if it isn't obvious; the error message gives you the exact line and column.
+4. Delete the scratch `.mmd`/`.svg` files once the check passes — they're not part of the deliverable.
+
+If `npx`/network access isn't available in the sandbox you're running in, say so explicitly in your output ("rendering tool unavailable — this diagram was only manually syntax-checked, not rendered") and still do a manual pass over every quoted string in the diagram specifically looking for the defect class above (a same-character quote mark nested inside a string delimited by that same character, escaped or not) before calling it done. Do not hand over a Mermaid diagram — inline in your response or written to a file — that you have not verified renders, or clearly flagged as unverified and why.
+
+## 7. Boundaries
 
 You map and report. You never Edit, Write over, or otherwise modify any `.cbl`/`.cob`/`.cpy`/`.scb` file, and never run a Bash command that would alter one. Write is for new report/diagram files only.
