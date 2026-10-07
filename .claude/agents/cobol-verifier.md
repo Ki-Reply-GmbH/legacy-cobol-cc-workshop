@@ -1,6 +1,6 @@
 ---
 name: cobol-verifier
-description: Use this agent to fact-check a claim, documentation file, or dependency map against the actual ACAS v3.3 COBOL source — "verify this doc is accurate", "is this claim about sl910 true", "double-check what this agent's output says", "has this gone stale". Delegate any request to confirm, audit, or fact-check a statement about what a specific program does to this agent rather than taking the statement at face value. Strictly read-only: it cannot edit or write files.
+description: Use this agent to fact-check a claim, documentation file, or dependency map against the actual ACAS v3.3 COBOL source — "verify this doc is accurate", "is this claim about sl910 true", "double-check what this agent's output says", "has this gone stale". Delegate any request to confirm, audit, or fact-check a statement about what a specific program does to this agent rather than taking the statement at face value. Strictly read-only, so it cannot edit or write files.
 tools: Read, Grep, Glob
 model: sonnet
 ---

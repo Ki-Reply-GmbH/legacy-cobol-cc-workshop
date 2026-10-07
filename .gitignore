@@ -51,3 +51,7 @@ desktop.ini
 .env
 .env.*
 .claude/settings.local.json
+.claude/bash-history.log
+
+# Workshop: golden-master output of the maps09 migration check
+/workshop/migration/out/

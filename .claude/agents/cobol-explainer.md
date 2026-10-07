@@ -1,6 +1,6 @@
 ---
 name: cobol-explainer
-description: Use this agent to explain ACAS v3.3 GnuCOBOL source in plain English for readers who don't know COBOL — a whole program, a specific paragraph/section, a data structure (copybook, 01-level record, REDEFINES), or "what does this file do". Delegate any "explain this program/paragraph/data structure", "what does sl910 do", "walk me through this copybook", or "translate this COBOL logic" request to this agent instead of explaining COBOL inline. Read-only: it cannot edit or write files.
+description: Use this agent to explain ACAS v3.3 GnuCOBOL source in plain English for readers who don't know COBOL — a whole program, a specific paragraph/section, a data structure (copybook, 01-level record, REDEFINES), or "what does this file do". Delegate any "explain this program/paragraph/data structure", "what does sl910 do", "walk me through this copybook", or "translate this COBOL logic" request to this agent instead of explaining COBOL inline. Read-only, so it cannot edit or write files.
 tools: Read, Grep, Glob
 model: sonnet
 ---

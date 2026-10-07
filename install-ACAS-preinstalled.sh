@@ -69,6 +69,9 @@ mv -vf sys002.so ~/bin
 mv -vf xl150.so ~/bin
 mv -vf acas*.so ~/bin
 mv -vf maps*.so ~/bin
+if [ -e maps09.jar ]; then
+mv -vf maps09.jar ~/bin
+fi
 mv -vf ACAS ~/bin
 mv -vf fhlogger.so ~/bin
 mv -vf ACAS-Sysout.so ~/bin
