@@ -48,6 +48,8 @@
 #                        then rebuild
 #   ACAS_BUILD_DIR=path  build directory (default: ~/cobolsrc/ACAS; no spaces)
 #   SKIP_DEPS=1          don't install packages (you installed them yourself)
+#   ACAS_NO_SEED=1       don't pre-fill ~/ACAS: the first launch shows ACAS's own
+#                        set-up screens instead (see "Start-up data" below)
 #
 # -----------------------------------------------------------------------------
 # WHAT THE SCRIPT CHECKS (and what it does not do)
@@ -60,6 +62,17 @@
 #   - macOS: needs Homebrew, which it does not install (see above).
 #   - Run it as your normal user, not with sudo: it asks for sudo itself.
 #   - After installing, it runs a test program that loads maps04 from ~/bin.
+#
+# -----------------------------------------------------------------------------
+# START-UP DATA (seed/)
+# -----------------------------------------------------------------------------
+#   On a fresh install (no ~/ACAS/system.dat yet) it copies seed/system.dat,
+#   analysis.dat and value.dat into ~/ACAS, so ACAS opens straight on its main
+#   menu instead of the set-up screens: company "ACAS Workshop", financial year
+#   2026, the default analysis codes. ACAS wrote those files itself (made with
+#   seed/make-seed.py, answers in seed/README.md). If python3 is available, it
+#   first runs ACAS against them in a temporary folder, and installs nothing if
+#   that fails. Existing ACAS data is never overwritten. ACAS_NO_SEED=1 skips it.
 #
 # -----------------------------------------------------------------------------
 # FIXES APPLIED TO THE BUILD COPY (upstream v3.3 problems found in the session)
@@ -82,12 +95,13 @@
 #   - Run:  cd ~/ACAS && ACAS
 #     (irs, stock, purchase and general also run directly by name; Sales has
 #     no standalone executable in this build, so open it from the ACAS menu)
-#   - First run opens the System Parameter set-up (manual chapter 19):
-#       * Company name: asked ONCE only, and can't be changed later.
-#       * Sub-systems in use: answer Y to all if unsure (also asked once).
-#       * (1-13) Data File Handling: 0  (COBOL files; this is a no-RDBMS build)
-#       * (2-03) Operating System: 6 = Linux (WSL), 3 = Mac
-#       * (2-05) Print spool names: CUPS printer names (`lpstat -p` lists them)
+#   - With the start-up data installed, ACAS opens on its main menu. Settings
+#     can be changed later with Z (System Setup), except the company name.
+#   - Without it (ACAS_NO_SEED=1), the first run opens the System Parameter
+#     set-up (manual chapter 19); RUNNING.md lists the answers. Known upstream
+#     bug: right after those screens ACAS.cbl calls sl070 with too few
+#     arguments and ACAS crashes. The settings are saved by then, so start it
+#     again; seed/README.md has the details.
 # =============================================================================
 [ -n "${BASH_VERSION:-}" ] || { echo "Run this script with bash:  bash $0" >&2; exit 1; }
 set -eu
@@ -269,6 +283,38 @@ disk_short() {
   return 1
 }
 
+# Start-up data copied into a fresh ~/ACAS (see "START-UP DATA" above).
+SEED_DIR="$SRC_DIR/seed"
+SEED_FILES="system.dat analysis.dat value.dat"
+# off | kept | missing | ready
+seed_plan() {
+  local f
+  case "$(printf '%s' "${ACAS_NO_SEED:-0}" | tr 'A-Z' 'a-z')" in
+    ""|0|no|false|off) ;;
+    *) echo off; return 0 ;;
+  esac
+  if [ -f "$HOME/ACAS/system.dat" ]; then echo kept; return 0; fi
+  for f in $SEED_FILES SHA256SUMS; do
+    if [ ! -f "$SEED_DIR/$f" ]; then echo missing; return 0; fi
+  done
+  echo ready
+}
+# Without python3 this is the only check: the files must match seed/SHA256SUMS.
+# Returns 0 (match), 1 (mismatch, SEED_MSG says which), 2 (no checksum tool).
+SEED_MSG=""
+seed_checksums() {
+  local tool line want name got
+  if command -v sha256sum >/dev/null 2>&1; then tool="sha256sum"
+  elif command -v shasum >/dev/null 2>&1; then tool="shasum -a 256"
+  else return 2; fi
+  while read -r want name; do
+    [ -n "$name" ] || continue
+    got="$($tool "$SEED_DIR/${name#\*}" 2>/dev/null | awk '{ print $1 }')"
+    if [ "$got" != "$want" ]; then SEED_MSG="seed/${name#\*} doesn't match seed/SHA256SUMS"; return 1; fi
+  done < "$SEED_DIR/SHA256SUMS"
+  return 0
+}
+
 PKG_LIST="GnuCOBOL 3.x, a C compiler and make, and the development packages for Berkeley DB, ncurses and zlib"
 other_manager() { local m; for m in dnf yum pacman zypper apk emerge; do command -v "$m" >/dev/null 2>&1 && { echo "$m"; return 0; }; done; return 0; }
 no_apt_message() {
@@ -362,6 +408,13 @@ run_check() {
   if disk_short; then bad "$DISK_MSG"; else ok "Disk space: enough free for the build directory and ~/bin"; fi
   if [ -e "$BUILD_DIR" ]; then note "$BUILD_DIR already exists: add --clean to rebuild it"; else ok "Build directory $BUILD_DIR is free"; fi
   if [ -f "$HOME/bin/ACAS" ]; then note "ACAS is already installed in ~/bin"; fi
+  case "$(seed_plan)" in
+    ready)   ok "Start-up data: ~/ACAS will be pre-filled from seed/, so ACAS opens on its main menu"
+             command -v python3 >/dev/null 2>&1 || note "python3 isn't installed: the start-up data will be installed without being tested against your build first" ;;
+    kept)    note "~/ACAS/system.dat exists: your ACAS settings and data will be kept as they are" ;;
+    off)     note "ACAS_NO_SEED is set: the first launch will show ACAS's set-up screens" ;;
+    missing) note "seed/ is incomplete ($SEED_FILES SHA256SUMS): the first launch will show ACAS's set-up screens" ;;
+  esac
   cols="$(tput cols 2>/dev/null || echo 0)"; lines="$(tput lines 2>/dev/null || echo 0)"
   if [ "$cols" -ge 80 ] && [ "$lines" -ge 24 ]; then ok "Terminal is ${cols}x${lines} (ACAS needs at least 80x24)"; else note "Terminal is ${cols}x${lines}; ACAS needs at least 80x24 to run"; fi
 
@@ -628,7 +681,55 @@ case "$VERIFY_OUT" in
   *) die "ACAS was installed, but a test program couldn't use its modules from ~/bin. Output: $VERIFY_OUT" ;;
 esac
 
-# --- 7. Done -----------------------------------------------------------------
+# --- 7. Start-up data --------------------------------------------------------
+# Pre-fill a fresh ~/ACAS so the first launch skips the set-up screens. Never
+# fatal: if anything is wrong, ACAS just asks for its settings as it normally does.
+step "Start-up data for ~/ACAS"
+SEED_RESULT=screens
+case "$(seed_plan)" in
+  off)     echo "ACAS_NO_SEED is set: skipped. ACAS will ask for its settings on first launch." ;;
+  kept)    echo "~/ACAS/system.dat already exists: your ACAS settings and data are kept as they are."
+           SEED_RESULT=kept ;;
+  missing) warn "seed/ in the repository is incomplete (needs $SEED_FILES SHA256SUMS): skipped. ACAS will ask for its settings on first launch." ;;
+  ready)
+    seed_ok=1
+    if command -v python3 >/dev/null 2>&1; then
+      # Run ACAS against a copy of the files in a temporary folder: main menu, Sales
+      # and every ledger must open and exit cleanly with this build. ~/ACAS isn't touched.
+      echo "Testing the start-up data with this build (takes about 30 seconds)..."
+      if seed_out="$(PATH="$HOME/bin:$PATH" COB_LIBRARY_PATH="$HOME/bin" ACAS_BIN="$HOME/bin" \
+                     python3 "$SEED_DIR/make-seed.py" --verify "$SEED_DIR" 2>&1)"; then
+        printf '%s\n' "$seed_out"
+      else
+        seed_ok=0
+        warn "This build couldn't use the start-up data in seed/, so it wasn't installed. ACAS will ask for its settings on first launch instead (answers: RUNNING.md). What the test saw:
+$(printf '%s\n' "$seed_out" | tail -n 30)"
+      fi
+    else
+      if seed_checksums; then
+        echo "python3 isn't installed, so ACAS couldn't be test-run with the start-up data; its files match seed/SHA256SUMS."
+      else
+        case $? in
+          1) seed_ok=0
+             warn "$SEED_MSG (changed or damaged), so the start-up data wasn't installed. ACAS will ask for its settings on first launch instead (answers: RUNNING.md)." ;;
+          *) echo "python3 isn't installed and there's no sha256sum or shasum, so the start-up data is installed without testing it first." ;;
+        esac
+      fi
+    fi
+    if [ "$seed_ok" = 1 ]; then
+      mkdir -p "$HOME/ACAS"
+      for f in $SEED_FILES; do
+        if [ ! -e "$HOME/ACAS/$f" ]; then
+          cp "$SEED_DIR/$f" "$HOME/ACAS/$f"
+          chmod 644 "$HOME/ACAS/$f"     # a checkout on /mnt/c makes every file look executable
+        fi
+      done
+      echo "Installed $SEED_FILES into ~/ACAS: company 'ACAS Workshop', financial year 2026, default analysis codes."
+      SEED_RESULT=seeded
+    fi ;;
+esac
+
+# --- 8. Done -----------------------------------------------------------------
 cols="$(tput cols 2>/dev/null || echo 0)"; lines="$(tput lines 2>/dev/null || echo 0)"
 step "ACAS is installed"
 cat << EOF
@@ -636,9 +737,13 @@ Next:
   1. Open a new terminal (or run: exec \$SHELL) so the new PATH/env vars load.
   2. Make the terminal at least 80x24 (this one is ${cols}x${lines}).
   3. cd ~/ACAS && ACAS
-First run starts the System Parameter set-up. See the header of this script
-for the recommended answers.
 EOF
+case "$SEED_RESULT" in
+  seeded) echo "ACAS opens straight on its main menu. Settings can be changed with Z (System Setup)." ;;
+  kept)   echo "ACAS opens with your existing settings and data." ;;
+  *)      echo "The first launch shows the System Parameter set-up screens (answers: RUNNING.md)."
+          echo "If ACAS stops right after them, start it again: that is a known upstream bug (seed/README.md)." ;;
+esac
 if [ "$cols" -gt 0 ] && { [ "$cols" -lt 80 ] || [ "$lines" -lt 24 ]; }; then
   warn "This terminal is ${cols}x${lines}. ACAS needs at least 80x24, or its screens will be garbled."
 fi
