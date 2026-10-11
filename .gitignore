@@ -38,6 +38,11 @@ load.err
 *.dat
 temp-backups/
 archives/
+# ...except the start-up data setup-acas.sh installs (see seed/README.md)
+!/seed/*.dat
+
+# Python bytecode (seed/make-seed.py, workshop/migration/*.py)
+__pycache__/
 
 # OS and editor files
 .DS_Store
@@ -51,3 +56,7 @@ desktop.ini
 .env
 .env.*
 .claude/settings.local.json
+.claude/bash-history.log
+
+# Workshop: golden-master output of the maps09 migration check
+/workshop/migration/out/

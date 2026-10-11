@@ -9,6 +9,16 @@
 | macOS | Homebrew | Install logic simulated on Linux; **not yet run on a real Mac** |
 | Other Linux (Fedora, Arch, …) | Install the packages yourself, then `SKIP_DEPS=1` | Untested |
 
+## Check your machine first (optional, changes nothing)
+
+```bash
+bash setup-acas.sh --check
+```
+
+It reports, with `[ok]`, `[..]` (note) or `[!!]` (blocking): your system, whether GnuCOBOL 3.x is installed **and can compile a small program**, whether the package step needs `sudo` (and whether `sudo` can ask for a password here), free disk space, and the terminal size. It installs nothing.
+
+**What the script installs, and what it doesn't.** It installs packages only if GnuCOBOL 3.x isn't already usable. On Debian/Ubuntu it uses `apt-get`, which is always there; on macOS it uses Homebrew, which is **not** installed with macOS and which the script never installs for you.
+
 ## Windows
 
 1. In **PowerShell as Administrator** (once), then reboot if asked:
@@ -38,7 +48,7 @@ Another distro? Install GnuCOBOL 3.2 and the Berkeley DB, ncurses and zlib devel
 
 ## macOS
 
-1. Install [Homebrew](https://brew.sh). The script starts `xcode-select --install` for you if the Command Line Tools are missing; if it does, let that finish and re-run.
+1. Install [Homebrew](https://brew.sh) first (check with `brew --version`). It doesn't come with macOS, and the script stops with this instruction if it can't find it. The script starts `xcode-select --install` for you if the Command Line Tools are missing; if it does, let that finish and re-run.
 2. In Terminal:
    ```bash
    cd Code-v3.3
@@ -58,9 +68,23 @@ ACAS
 
 `irs`, `stock`, `purchase` and `general` also start by name. **Sales has no command of its own in this build; open it from the `ACAS` menu.**
 
-## First launch: setup screens
+## First launch
 
-The first run asks for the system parameters (Enter or Tab = next field, Esc = quit):
+**ACAS opens straight on its main menu.** On a fresh install the script copies ready-made start-up data from [`seed/`](seed/README.md) into `~/ACAS`, after testing it against your build:
+- company `ACAS Workshop`;
+- financial year 2026 (UK date format);
+- COBOL data files;
+- IRS instead of General Ledger;
+- print spool name `none`;
+- the default analysis codes.
+
+Change settings later with **Z** (System Setup) on the ACAS menu. Only the company name and the sub-system choices are fixed. When Sales asks for today's date it offers the date stored in the settings (the day they were made), so type today's date if it matters.
+
+Existing data in `~/ACAS` is never overwritten. If the test fails on your system, nothing is copied and you get the set-up screens below.
+
+### Doing the set-up screens yourself
+
+To enter your own company name (it can't be changed later), install with `ACAS_NO_SEED=1 bash setup-acas.sh`, or delete `~/ACAS/system.dat` before the first start. The first run then asks for the system parameters (Tab = next field, Enter = accept the whole screen, Esc = quit):
 
 | Field | Enter |
 |---|---|
@@ -69,17 +93,21 @@ The first run asks for the system parameters (Enter or Tab = next field, Esc = q
 | Date format | `1` = dd/mm/yyyy |
 | Start / End date, VAT rates | Your financial year and rates |
 | **Data File Handling (1-13)** | **`0`** (plain files; this build has no database) |
-| **Operating System (2-03)** | **`6`** Linux (also for WSL), **`3`** Mac |
+| **Operating System (2-03)** | **`6`** Linux (also fine on WSL and macOS) |
 | Print spool names | A name, e.g. `none`. Real printing needs a CUPS printer with exactly that name. |
 | **Use IRS instead of GL?** | **`Y`**: IRS is the tested ledger; General Ledger hasn't been re-verified |
-| Print parameters at the end | `N` (no printer) |
+| Print parameters at the end ("Do you want printed copy") | `N`: there's no printer |
 
 Everything else: keep the defaults. Details are in `ACAS-Manuals/ACAS - Building the ACAS System.pdf`, chapter 19.
+
+**ACAS then crashes**, whatever you answered: a known upstream bug (`ACAS.cbl` calls `sl070` with two of its four arguments; see [`seed/README.md`](seed/README.md#why-the-analysis-files-are-included-an-upstream-bug)). Your settings are already saved:
+1. Start `ACAS` again.
+2. Open Sales (**B**), press **L** to create the default analysis codes, then **9** to go back.
 
 ## Re-running or starting over
 
 - **Rebuild only** (e.g. after editing a `.cbl` file): `bash setup-acas.sh --clean`. Your accounting data in `~/ACAS` is kept.
-- **Remove everything and start from scratch.** This **deletes all accounting data** in `~/ACAS`:
+- **Remove everything and start from scratch.** This **deletes all accounting data** in `~/ACAS`. The next `bash setup-acas.sh` installs the start-up data again:
   ```bash
   rm -rf ~/cobolsrc/ACAS ~/bin ~/ACAS ~/ACAS-practice ~/tmp
   ```
@@ -90,7 +118,7 @@ Everything else: keep the defaults. Details are in `ACAS-Manuals/ACAS - Building
   # macOS
   sed -i '' '/^# ACAS (added by setup-acas.sh)$/,/^export TMPDIR=/d' ~/.zshrc
   ```
-- Run `bash setup-acas.sh --help` for all options (`ACAS_BUILD_DIR=path`, `SKIP_DEPS=1`).
+- Run `bash setup-acas.sh --help` for all options (`ACAS_BUILD_DIR=path`, `SKIP_DEPS=1`, `ACAS_NO_SEED=1`).
 
 ## Troubleshooting
 
@@ -99,9 +127,26 @@ Everything else: keep the defaults. Details are in `ACAS-Manuals/ACAS - Building
 | `ERROR: ... already exists` | A previous build copy exists. Re-run with `--clean`. |
 | `ERROR: The build reported the errors above` | A compile failed. The full log is `~/cobolsrc/ACAS/build.log`. |
 | `export: ... not a valid identifier` when opening a terminal (WSL) | The upstream installer wrote an unquoted PATH line. `setup-acas.sh` repairs it; to fix an older install by hand, see below. |
+| `syntax error near unexpected token` with `\r` in it, or `command not found` with `\r`, or `bad interpreter` |  The script has Windows line endings, for example after downloading a zip. Fix: `sed -i 's/\r$//' setup-acas.sh` (Linux/WSL) and re-run. A git checkout doesn't do this; `.gitattributes` keeps `*.sh` as LF. |
+| `This is Windows (MINGW64...)` | You ran it in Git Bash or PowerShell. Open **Ubuntu** (WSL) and run it there. |
+| `Don't run this with sudo` | Run `bash setup-acas.sh` as yourself. It asks for `sudo` only if it must install packages; under `sudo` ACAS would be installed into root's home. |
+| `sudo needs a password but there's no terminal` | You ran it from a pipe, a script or CI. Run it from a terminal, or install GnuCOBOL 3.x, a C compiler, make and the Berkeley DB, ncurses and zlib development packages yourself and use `SKIP_DEPS=1`. |
+| `This Linux has no apt-get` | Only Debian/Ubuntu are automated. Install the packages named in the message with your own package manager, then `SKIP_DEPS=1 bash setup-acas.sh`. |
+| `Homebrew was not found` | macOS only. Install Homebrew from https://brew.sh, open a **new** Terminal, re-run. |
+| `cobc ... can't compile and link a small test program` | GnuCOBOL is there but a C compiler, or the zlib or ncurses development files, are missing. The message includes cobc's own error. |
+| `GnuCOBOL 3.1` warning | Your system's package is older than the 3.2 ACAS is tested with. Most of the build may still work; if it fails, build GnuCOBOL 3.2 from https://gnucobol.sourceforge.io. |
+| `sudo didn't accept the password, or you aren't allowed to use sudo` | Asked once, before anything is installed. Retype it, or ask an administrator to install the packages and use `SKIP_DEPS=1`. |
+| `This is the copy of setup-acas.sh inside a build directory` | You ran `~/cobolsrc/ACAS/setup-acas.sh`. Run the one in your clone; with `--clean`, the copy would delete its own sources. |
+| `ACAS_BUILD_DIR must be a directory of its own` or `contains the sources` | `ACAS_BUILD_DIR` is `/`, your home, the repository or a folder above it, which `--clean` would delete. Pick an empty, separate directory. |
+| `The ACAS settings aren't in ~/.bashrc (it may be read-only)` | The build is installed; only the settings are missing. Add the lines printed with the warning to your shell start-up file yourself. |
+| `The installer reported problems` | A module wasn't copied into `~/bin`. The lines after the warning name it; fix the cause (disk space, permissions) and run `--clean`. The missing `sales` executable is expected and isn't reported. |
+| A space in `HOME` or `ACAS_BUILD_DIR` | The vendor scripts can't handle spaces. Use paths without spaces. |
 | `ACAS: command not found` | Open a new terminal (or `exec bash` / `exec zsh`) so the settings load. |
 | Garbled screen | Terminal is smaller than 80×24. Enlarge it. |
 | `Printer or class does not exist` | Expected without a CUPS printer. Everything except printing works. |
+| `attempt to reference invalid memory address` or `Segmentation fault`, naming `sl070`, right after the set-up screens | The upstream `ACAS.cbl` → `sl070` bug, whatever you answered (see [First launch](#doing-the-set-up-screens-yourself)). Your settings are saved: start `ACAS` again, then Sales **L**, **9** to create the analysis codes. A seeded install never reaches this code. |
+| `This build couldn't use the start-up data in seed/` | The test run of ACAS with the seed files failed on your system, so they weren't installed; the lines after the warning show what it saw. ACAS works normally: you get the set-up screens on first launch. |
+| ACAS shows the set-up screens although you expected the main menu | `~/ACAS/system.dat` doesn't exist: the install was run with `ACAS_NO_SEED=1`, the seed test failed, or the file was deleted. Either answer the screens, or copy the seed yourself: `cp -n seed/*.dat ~/ACAS/` from the repository root. |
 | `fh-logger.txt` appears in `~/ACAS` | The maintainer ships with file-access logging switched on for testing (`common/fhlogger.cbl`). It's a file-access log, not accounting data (see the 2020-06-23 note in `README`). |
 
 Hand-fix for the PATH error (WSL/Linux):

@@ -1,6 +1,12 @@
 # Shell scripts must keep LF endings or bash fails on them in WSL/Linux/macOS,
 # even when the repo is checked out on Windows with core.autocrlf=true.
 *.sh text eol=lf
+*.py text eol=lf
+
+# ACAS data files (seed/*.dat) are binary: line-ending conversion would corrupt them.
+*.dat binary
+# Their checksums are compared byte for byte, line endings included.
+seed/SHA256SUMS text eol=lf
 
 *.zip binary
 *.gz binary

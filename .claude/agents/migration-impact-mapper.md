@@ -1,6 +1,6 @@
 ---
 name: migration-impact-mapper
-description: Use this agent for "what would break if I changed X", "blast radius of X", "impact of changing this program/copybook/data file", or "what must be retested if X's record layout or interface changes" requests about ACAS v3.3. Given one named target (a program, a copybook, or a shared data file), it searches the WHOLE repository across every artifact type (COBOL, copybooks, shell scripts, SQL schema, config, generated docs) and writes a confidence-graded impact report to docs/impact/<target>.md. Use cobol-dependency-mapper instead for a call graph of what a program itself calls; use this agent for the reverse question: what depends on the target. It never modifies source, scripts or config.
+description: Use this agent for "what would break if I changed X", "blast radius of X", "impact of changing this program/copybook/data file", or "what must be retested if X's record layout or interface changes" requests about ACAS v3.3. Given one named target (a program, a copybook, or a shared data file), it searches the WHOLE repository across every artifact type (COBOL, copybooks, shell scripts, SQL schema, config, generated docs) and writes a confidence-graded impact report to docs/impact/<target>.md. Use cobol-dependency-mapper instead for a call graph of what a program itself calls; use this agent for the reverse question, what depends on the target. It never modifies source, scripts or config.
 tools: Read, Grep, Glob, Write
 model: sonnet
 ---
