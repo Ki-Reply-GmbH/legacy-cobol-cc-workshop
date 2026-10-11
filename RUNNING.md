@@ -17,7 +17,7 @@ bash setup-acas.sh --check
 
 It reports, with `[ok]`, `[..]` (note) or `[!!]` (blocking): your system, whether GnuCOBOL 3.x is installed **and can compile a small program**, whether the package step needs `sudo` (and whether `sudo` can ask for a password here), free disk space, and the terminal size. It installs nothing.
 
-**What the script installs, and what it doesn't.** It installs packages only if GnuCOBOL 3.x isn't already usable. On Debian/Ubuntu it uses `apt-get`, which is always there; on macOS it uses Homebrew, which is **not** installed with macOS and which the script never installs for you.
+**What the script installs, and what it doesn't.** It installs packages only if GnuCOBOL 3.x isn't already usable. On Debian/Ubuntu it uses `apt-get`, which is always there; on macOS it uses Homebrew, which is **not** installed with macOS and which the script never installs for you. Separately, on Debian/Ubuntu it also installs a JDK 17 (`openjdk-17-jdk-headless`) and `python3` if they're missing, for the workshop's bonus Java step; ACAS doesn't need them, a failure there is only a warning, and `ACAS_NO_JAVA=1` skips it.
 
 ## Windows
 
@@ -118,7 +118,7 @@ Everything else: keep the defaults. Details are in `ACAS-Manuals/ACAS - Building
   # macOS
   sed -i '' '/^# ACAS (added by setup-acas.sh)$/,/^export TMPDIR=/d' ~/.zshrc
   ```
-- Run `bash setup-acas.sh --help` for all options (`ACAS_BUILD_DIR=path`, `SKIP_DEPS=1`, `ACAS_NO_SEED=1`).
+- Run `bash setup-acas.sh --help` for all options (`ACAS_BUILD_DIR=path`, `SKIP_DEPS=1`, `ACAS_NO_SEED=1`, `ACAS_NO_JAVA=1`).
 
 ## Troubleshooting
 

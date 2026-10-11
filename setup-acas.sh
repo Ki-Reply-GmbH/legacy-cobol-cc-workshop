@@ -48,6 +48,8 @@
 #                        then rebuild
 #   ACAS_BUILD_DIR=path  build directory (default: ~/cobolsrc/ACAS; no spaces)
 #   SKIP_DEPS=1          don't install packages (you installed them yourself)
+#   ACAS_NO_JAVA=1       don't install the JDK 17 and python3 that the workshop's bonus
+#                        Java step (step 16) needs; SKIP_DEPS=1 skips them too
 #   ACAS_NO_SEED=1       don't pre-fill ~/ACAS: the first launch shows ACAS's own
 #                        set-up screens instead (see "Start-up data" below)
 #
@@ -60,6 +62,11 @@
 #   - Debian/Ubuntu: uses apt-get (always present there). Other Linux: stops
 #     and says what to install; then re-run with SKIP_DEPS=1.
 #   - macOS: needs Homebrew, which it does not install (see above).
+#   - Separately, and never fatal: if a JDK 17 (javac, or $JAVA_HOME/bin/javac) or
+#     python3 is missing, it installs openjdk-17-jdk-headless and python3 with
+#     apt-get, for the workshop's bonus Java step. ACAS itself needs neither. A
+#     failure (no sudo, no network, no package) only prints a warning with the
+#     manual command. On macOS this is not automated: it prints the brew command.
 #   - Run it as your normal user, not with sudo: it asks for sudo itself.
 #   - After installing, it runs a test program that loads maps04 from ~/bin.
 #
@@ -368,6 +375,78 @@ install_deps_macos() {
   brew install gnucobol || die "'brew install gnucobol' failed (its message is above). Fix that (network? 'brew doctor'), then re-run."
 }
 
+# Tools for the workshop's bonus Java step (maps module to Java): a JDK 17 or later
+# and python3. ACAS itself needs neither, so installing them never stops the build:
+# every failure below is a warning that says how to install them by hand.
+JDK_PKG="openjdk-17-jdk-headless"
+javac_path() {
+  if [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/javac" ]; then echo "$JAVA_HOME/bin/javac"
+  else command -v javac 2>/dev/null || true; fi
+}
+# Major version of the JDK that build-maps09.sh would use ("javac 17.0.20" -> 17); empty if none.
+java_major() {
+  local j; j="$(javac_path)"
+  [ -n "$j" ] || return 0
+  LC_ALL=C "$j" -version 2>&1 | grep -oE '[0-9]+' | head -n1 || true
+}
+have_jdk() { local v; v="$(java_major)"; [ -n "$v" ] && [ "$v" -ge 17 ]; }
+have_python() { command -v python3 >/dev/null 2>&1; }
+# off | ready | install
+tools_plan() {
+  case "$(printf '%s' "${ACAS_NO_JAVA:-0}" | tr 'A-Z' 'a-z')" in
+    ""|0|no|false|off) ;;
+    *) echo off; return 0 ;;
+  esac
+  [ "${SKIP_DEPS:-0}" = "1" ] && { echo off; return 0; }
+  if have_jdk && have_python; then echo ready; else echo install; fi
+}
+tools_missing() {
+  local m=""
+  have_jdk || m="a JDK 17"
+  have_python || m="${m:+$m and }python3"
+  printf '%s' "$m"
+}
+tools_manual() {
+  if [ "$OS" = "Darwin" ]; then
+    printf "Install what is missing yourself: brew install openjdk@17 (then set JAVA_HOME to \$(brew --prefix openjdk@17)). python3 comes with the Xcode Command Line Tools."
+  else
+    printf "Install what is missing yourself: sudo apt-get install -y %s python3 (or set ACAS_NO_JAVA=1 to skip this step if you won't do the bonus Java step)." "$JDK_PKG"
+  fi
+}
+
+install_tools() {
+  local pkgs="" cand
+  step "Installing the tools for the bonus Java step ($(tools_missing))"
+  if [ "$OS" = "Darwin" ]; then
+    warn "Not automated on macOS (Homebrew's JDK is keg-only and needs JAVA_HOME). $(tools_manual)"
+    return 0
+  fi
+  command -v apt-get >/dev/null 2>&1 || { warn "No apt-get here. $(tools_manual)"; return 0; }
+  have_jdk || pkgs="$JDK_PKG"
+  have_python || pkgs="${pkgs:+$pkgs }python3"
+  case "$(sudo_mode)" in
+    root)          SUDO="" ;;
+    passwordless)  SUDO="sudo" ;;
+    prompt)        SUDO="sudo"; echo "sudo will ask for your password to install: $pkgs"
+                   sudo -v || { warn "sudo didn't accept the password, or you aren't allowed to use sudo. $(tools_manual)"; return 0; } ;;
+    *)             warn "Can't use sudo here (not installed, or no terminal to ask for a password). $(tools_manual)"; return 0 ;;
+  esac
+  apt_get update || warn "apt-get update failed. Trying the install with the package lists you already have."
+  if ! have_jdk; then
+    cand="$(LC_ALL=C apt-cache policy "$JDK_PKG" 2>/dev/null | awk '/Candidate:/ { print $2; exit }')"
+    if [ -z "$cand" ] || [ "$cand" = "(none)" ]; then
+      warn "No $JDK_PKG package in your apt sources. Install a JDK 17 another way and set JAVA_HOME."
+      pkgs="${pkgs#$JDK_PKG}"; pkgs="${pkgs# }"
+    fi
+  fi
+  if [ -n "$pkgs" ]; then
+    # shellcheck disable=SC2086   # $pkgs is a short list of package names
+    apt_get install -y $pkgs || { warn "apt-get couldn't install $pkgs (its message is above). $(tools_manual)"; return 0; }
+  fi
+  if have_jdk; then echo "JDK $(java_major) is ready ($(javac_path))."; else warn "A JDK 17 is still missing. $(tools_manual)"; fi
+  if have_python; then echo "$(python3 --version 2>&1) is ready."; else warn "python3 is still missing. $(tools_manual)"; fi
+}
+
 # --- 1a. --check: report, change nothing -------------------------------------
 PROBLEMS=0
 ok()   { printf '  [ok] %s\n' "$*"; }
@@ -405,6 +484,11 @@ run_check() {
     fi
   fi
 
+  case "$(tools_plan)" in
+    ready)   ok "JDK $(java_major) and $(python3 --version 2>&1) are installed (bonus Java step)" ;;
+    off)     note "Bonus Java step: ACAS_NO_JAVA or SKIP_DEPS is set, so a JDK 17 and python3 won't be installed" ;;
+    install) note "Bonus Java step: $(tools_missing) is missing; the script will try to install it (a failure there is only a warning, ACAS still builds)" ;;
+  esac
   if disk_short; then bad "$DISK_MSG"; else ok "Disk space: enough free for the build directory and ~/bin"; fi
   if [ -e "$BUILD_DIR" ]; then note "$BUILD_DIR already exists: add --clean to rebuild it"; else ok "Build directory $BUILD_DIR is free"; fi
   if [ -f "$HOME/bin/ACAS" ]; then note "ACAS is already installed in ~/bin"; fi
@@ -444,6 +528,9 @@ case "$(cobc_version)" in
   3.0*|3.1*) warn "ACAS v3.3 is built and tested with GnuCOBOL 3.2; this version may fail to build. Your system's package is the newest apt offers; for 3.2 see https://gnucobol.sourceforge.io" ;;
   [4-9].*)   warn "GnuCOBOL $(cobc_version) isn't the 3.x line ACAS v3.3 is built and tested with; the build may fail." ;;
 esac
+
+# A JDK 17 and python3 for the workshop's bonus Java step. Never fatal.
+if [ "$(tools_plan)" = "install" ]; then install_tools; fi
 
 # --- 2. Copy sources to the build directory ----------------------------------
 step "Preparing build directory: $BUILD_DIR"
